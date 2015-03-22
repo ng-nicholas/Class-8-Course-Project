@@ -50,7 +50,8 @@ trainPC$classe <- trainClean$classe
 
 # Building random forest model
 print("# Building RF model...")
-modfitRF <- train(classe ~ ., data = trainPC, method = "rf")
+library("randomForest")
+modfitRF <- randomForest(classe ~ ., data = trainPC)
 
 # # Building Stochastic Gradient Boosting model
 # print("# Building GBM model...")
