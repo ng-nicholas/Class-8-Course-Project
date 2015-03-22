@@ -19,7 +19,7 @@ work.dir <- "C:/Users/Nicholas/Documents/GitHub/Class-8-Course-Project"
 setwd(work.dir)
 dataFull <- read.csv("./data/pml-training.csv", header = T,
                       stringsAsFactors = T)
-dataTest <- read.csv("./data/pml-testing.csv", header = T,
+dataProb <- read.csv("./data/pml-testing.csv", header = T,
                       stringsAsFactors = T)
 
 # Partitioning full problem data set into training and testing sets (does not
@@ -84,3 +84,11 @@ conmatRF <- confusionMatrix(predRF, testing$classe)
 # enDataTest <- data.frame(rf = predRF, gbm = predGBM, RR = predRR)
 # predEN <- predict(modfitEN, enDataTest)
 # conmatEN <- confusionMatrix(predEN, testing$classe)
+
+# Preprocessing problem cases
+probClean <- select(dataProb, -c(1:7, 12:36, 50:59, 69:83, 87:101,
+                                 103:112, 125:139, 141:150, 160))
+probPC <- predict(modPC, probClean)
+
+# Predicting outcomes of problem cases
+probRF <- predict(modfitRF, probPC)
