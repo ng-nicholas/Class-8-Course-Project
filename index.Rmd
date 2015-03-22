@@ -1,0 +1,136 @@
+---
+title: "Predictions on Exercise Quality via Sensor Data"
+author: "Nicholas Ng"
+date: "Sunday, March 22, 2015"
+output: html_document
+---
+
+# Abstract
+As part of the course project for the Practical Machine Learning course on Coursera, the Groupware@LES data on Weight Lifting Exercises was used to train a model for the purposes of predicting the quality of an exercise.
+
+With moderate preprocessing of the data and fitting it with a simple random forest model, one is able to predict the quality of an unknown exercise of a similar nature with 97.3% accuracy, as determined via cross-validation.
+
+# Data Processing
+To enable swift processing of all data, the following code attaches packages that enable multicore processing and explicitly requests for all processes to use the processor cluster for computations where possible.
+```{r multicore}
+suppressMessages(library("cluster"))
+suppressMessages(library("parallel"))
+suppressMessages(library("doSNOW"))
+coreNumber <- max(detectCores(),1)
+cluster <- makeCluster(coreNumber, type = "SOCK",outfile="")
+registerDoSNOW(cluster)
+```
+
+Additionally, to support the analysis to follow, the following packages are attached:
+```{r loadpacks}
+suppressMessages(library("dplyr"))
+suppressMessages(library("reshape2"))
+suppressMessages(library("ggplot2"))
+suppressMessages(library("caret"))
+suppressMessages(library("randomForest"))
+```
+
+To begin the analysis of the datasets, both the training and test datasets are downloaded from the Coursera website, as follows:
+```{r downdata, cache = TRUE}
+urlTrain <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+urlProb <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+dataTrain <- read.csv("./data/pml-training.csv", header = T, 
+                      stringsAsFactors = T)
+dataProb <- read.csv("./data/pml-testing.csv", header = T, 
+                     stringsAsFactors = T)
+```
+For differentiation purposes, one has named the test dataset as "dataProb" and it will be referred to as "problem cases" for the remainder of this study due to the fact that the training data is partitioned into training/testing sets for cross-validation.
+
+Once the data has been read into R, the training data set is partitioned:
+```{r partitioning}
+set.seed(1234)
+inTrain <- createDataPartition(y = dataTrain$classe, p = 0.7, list = F)
+training <- dataTrain[inTrain, ]
+testing <- dataTrain[-inTrain, ]
+```
+
+A quick look at the head and summary of the dataset reveals that there are a number of columns which do not contain relevant or useful data:
+```{r datahead, results = 'hide'}
+head(training)
+summary(training)
+```
+The results have been printed in the appendix to prevent clutter. However as seen in Appendix A, the first 7 columns of the dataset do not contain any relevant data for analysis as they are simply identifiers for the individual data points. On the other hand, there are many other columns within the set which should contain data, but are either blank or appear to contain only "NA" values.
+
+To validate that these variables are indeed not useful for analysis, the `nearZeroVar` function is used to identify variables which have near zero variance:
+```{r nsvidentify, results = 'hide'}
+nearZeroVar(training, saveMetrics = T)
+```
+
+Using a combination of information from the above methods (refer to Appendix A and B for the output), the relevant variables are then subsequently removed from both the training and testing partitions:
+```{r selectvars}
+trainClean <- select(training, -c(1:7, 12:36, 50:59, 69:83, 87:101,
+                                  103:112, 125:139, 141:150))
+testClean <- select(testing, -c(1:7, 12:36, 50:59, 69:83, 87:101,
+                                103:112, 125:139, 141:150))
+```
+
+Of the remaining variables, a combined histogram plot is used to explore the data further, identifying if variable require normalisation or standardisation:
+```{r multihist, fig.height = 8, fig.width = 10}
+trainLong <- trainClean
+for (i in 1:length(trainLong)) {
+    trainLong[, i] <- as.numeric(trainLong[, i])
+    }
+trainLong$id <- row.names(trainClean)
+trainLong <- melt(trainLong, id.var="id")
+g <- ggplot(trainLong, aes(x = value, fill = variable)) + 
+    facet_wrap( ~ variable, scale = "free") +
+    geom_histogram() +
+    theme(legend.position = "none")
+suppressMessages(print(g))
+```
+
+Judging from the distributions of the variables, there are many variables which have a large absolute range, so it would be beneficial for one to normalise the variables:
+```{r normalise}
+modNorm <- preProcess(trainClean[, -length(trainClean)],
+                      method = c("scale", "center"))
+trainNorm <- predict(modNorm, trainClean[, -length(trainClean)])
+testNorm <- predict(modNorm, testClean[, -length(testClean)])
+trainNorm$classe <- trainClean$classe
+```
+
+Lastly, although it is advisable to use Principal Component Analysis to reduce the number of dimensions given such a highly-dimensional dataset, doing so might reduce the accuracy of the model. Therefore, this was not done in this study.
+
+# Model Building
+Given that this is a classification-type problem, an appropriate prediction method was selected, which in this case, was the random forest model. The `randomForest` function from the package of the same name was used instead of using the `train` function from the `caret` package, due to computational efficiency:
+```{r modeltraining, cache = TRUE}
+modfitRF <- randomForest(classe ~ ., data = trainNorm)
+```
+
+As seen earlier in the histogram plots, many variables were either very homogenous or clustered as specific values. Therefore, it is expected that the out-of-sample error would be very small, of about 1% or less. For confirmation of this figure, one can predict on the test set, and construct the confusion matrix, as follows:
+```{r modelvalidation}
+predRF <- predict(modfitRF, testNorm)
+confusionMatrix(predRF, testing$classe)
+```
+
+Given the high accuracy of the model, the estimation of a less than 1% out-of-sample error rate is valid.
+
+# Problem Case Prediction
+Finally, to complete the analysis, the problem case data is processed and predicted in the same way as the previous datasets:
+```{r problemsolving}
+probClean <- select(dataProb, -c(1:7, 12:36, 50:59, 69:83, 87:101,
+                                 103:112, 125:139, 141:150, 160))
+probNorm <- predict(modNorm, probClean)
+
+probRF <- predict(modfitRF, probNorm)
+probRF
+```
+
+When submitted against the submission server, the above results yielded 100% correct answers.
+
+# Appendix A - Head & Summary of Training Data Partition
+```{r, echo = FALSE}
+head(training)
+```
+```{r, echo = FALSE}
+summary(training)
+```
+
+# Appendix B - Near Zero Variance Analysis Table
+```{r, echo = FALSE}
+nearZeroVar(training, saveMetrics = T)
+```

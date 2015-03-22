@@ -1,0 +1,12 @@
+base
+cluster
+foreach
+iterators
+snow
+doSNOW
+dplyr
+reshape2
+ggplot2
+lattice
+caret
+randomForest
